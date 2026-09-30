@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>The House Below 3D</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050608;color:white;font-family:Arial,sans-serif;touch-action:none}canvas{position:fixed;inset:0;width:100%;height:100%;image-rendering:auto}#hud{position:fixed;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;pointer-events:none;text-shadow:0 2px 4px #000;font-weight:bold}#tip{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0009;border:1px solid #fff3;padding:8px 12px;border-radius:12px;font-size:13px;pointer-events:none}#joystick{position:fixed;left:22px;bottom:28px;width:120px;height:120px;border-radius:50%;background:#fff1;border:2px solid #fff4}#stick{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:#fff5;border:1px solid #fff8}#look{position:fixed;right:0;top:0;width:55%;height:75%;}#up,#down{position:fixed;right:22px;width:58px;height:58px;border-radius:16px;background:#111b;color:#fff;border:1px solid #fff5;font-size:25px}#up{bottom:104px}#down{bottom:38px}#msg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#080a0df0;border:1px solid #fff4;border-radius:18px;padding:22px;max-width:80%;text-align:center;display:none}button{font:inherit}
+</style></head><body>
+<canvas id="game"></canvas><div id="hud"><span>THE HOUSE BELOW</span><span id="floor">Floor 1</span></div><div id="tip">WASD / joystick to move • drag right side to look • use stairs to change floors</div><div id="joystick"><div id="stick"></div></div><div id="look"></div><button id="up">▲</button><button id="down">▼</button><div id="msg"></div>
+<script>
+const c=document.getElementById('game'),ctx=c.getContext('2d');let W,H,DPR;
+function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;c.width=W*DPR;c.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}addEventListener('resize',resize);resize();
+// 3 floors. # = wall, . = floor, S = staircase tile, D = door.
+const maps=[
+["################","#..............#","#..####........#","#..#..#........#","#..#..#....S...#","#..#..#####....#","#...............#","#....####.......#","#....#..........#","#....#..........#","#....#.....S....#","#................#","#................#","################"],
+["################","#S.............#","#..####........#","#..#..#........#","#..#..#.........#","#..#..#####.....#","#...............#","#.......####....#","#.......#.......#","#.......#.......#","#..S............#","#................#","#................#","################"],
+["################","#S.............#","#..............#","#....#####.....#","#....#.........#","#....#....S....#","#....#####.....#","#...............#","#.......####....#","#.......#.......#","#...............#","#................#","#................#","################"]];
+// Normalize row lengths
+for(let f=0;f<maps.length;f++) maps[f]=maps[f].map(r=>r.padEnd(16,'#').slice(0,16));
+const TILE=1, FOV=Math.PI/3, maxDepth=18;let floor=0;
+const p={x:2.5,y:1.8,a:0};let keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key==='ArrowUp')floorUp();if(e.key==='ArrowDown')floorDown()});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function cell(x,y){let r=maps[floor][Math.floor(y)],ch=r&&r[Math.floor(x)];return ch||'#'}
+function wall(x,y){return cell(x,y)==='#'}
+function can(x,y){let r=.18;return !wall(x-r,y-r)&&!wall(x+r,y-r)&&!wall(x-r,y+r)&&!wall(x+r,y+r)}
+function move(dx,dy){let nx=p.x+dx,ny=p.y+dy;if(can(nx,p.y))p.x=nx;if(can(p.x,ny))p.y=ny}
+function stairHere(){return cell(p.x,p.y)==='S'}
+function floorUp(){if(stairHere()&&floor<maps.length-1){floor++;p.x=1.8;p.y=1.8;p.a=0;flash('You climbed to Floor '+(floor+1))}}
+function floorDown(){if(stairHere()&&floor>0){floor--;p.x=1.8;p.y=1.8;p.a=0;flash('You went down to Floor '+(floor+1))}}
+let msgTimer=0;function flash(t){const m=document.getElementById('msg');m.textContent=t;m.style.display='block';clearTimeout(msgTimer);msgTimer=setTimeout(()=>m.style.display='none',900)}
+function makeTex(){let t=document.createElement('canvas');t.width=t.height=128;let g=t.getContext('2d');let grd=g.createLinearGradient(0,0,128,128);grd.addColorStop(0,'#7a766e');grd.addColorStop(.5,'#625e58');grd.addColorStop(1,'#4e4b47');g.fillStyle=grd;g.fillRect(0,0,128,128);for(let i=0;i<700;i++){let x=Math.random()*128,y=Math.random()*128,a=Math.random()*.09;g.fillStyle=`rgba(255,255,255,${a})`;g.fillRect(x,y,1.5,1.5)}return t}const tex=makeTex();
+function render(){
+ ctx.clearRect(0,0,W,H); // sky + floor
+ let sky=ctx.createLinearGradient(0,0,0,H/2);sky.addColorStop(0,'#07090d');sky.addColorStop(1,'#20252b');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H/2);let fl=ctx.createLinearGradient(0,H/2,0,H);fl.addColorStop(0,'#1a1817');fl.addColorStop(1,'#050505');ctx.fillStyle=fl;ctx.fillRect(0,H/2,W,H/2);
+ const rays=Math.max(180,Math.floor(W/2));const step=W/rays;for(let i=0;i<rays;i++){let cam=(i/(rays-1)-.5)*FOV;let a=p.a+cam;let sin=Math.sin(a),cos=Math.cos(a);let d=0;while(d<maxDepth){d+=.025;let x=p.x+cos*d,y=p.y+sin*d;if(wall(x,y))break}let corrected=d*Math.cos(cam);let h=Math.min(H*1.8,H/(corrected+.0001));let top=H/2-h/2;let side=(Math.abs(Math.sin(a))>.7)?1:.7;let shade=Math.max(.18,1-corrected/15)*side;let tx=((p.x+cos*d)%1+1)%1*128; if(Math.abs(Math.sin(a))>.7)tx=((p.y+sin*d)%1+1)%1*128;let sx=Math.floor(tx);ctx.globalAlpha=.35+shade*.65;ctx.drawImage(tex,sx,0,1,128,i*step,top,step,h);ctx.globalAlpha=1}
+ // crosshair
+ ctx.strokeStyle='#fff9';ctx.beginPath();ctx.moveTo(W/2-6,H/2);ctx.lineTo(W/2+6,H/2);ctx.moveTo(W/2,H/2-6);ctx.lineTo(W/2,H/2+6);ctx.stroke();document.getElementById('floor').textContent='Floor '+(floor+1);
+}
+let last=performance.now();function loop(now){let dt=Math.min(.04,(now-last)/1000);last=now;let speed=2.1*dt;let f=(keys.w?1:0)-(keys.s?1:0),st=(keys.d?1:0)-(keys.a?1:0);move((Math.cos(p.a)*f-Math.sin(p.a)*st)*speed,(Math.sin(p.a)*f+Math.cos(p.a)*st)*speed);render();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+// joystick
+const joy=document.getElementById('joystick'),stick=document.getElementById('stick');let joyOn=false,jx=0,jy=0;function joyMove(e){let r=joy.getBoundingClientRect(),x=e.touches?e.touches[0].clientX:e.clientX,y=e.touches?e.touches[0].clientY:e.clientY,cx=r.left+r.width/2,cy=r.top+r.height/2,dx=x-cx,dy=y-cy,l=Math.hypot(dx,dy),m=42;if(l>m){dx=dx/l*m;dy=dy/l*m}stick.style.transform=`translate(${dx}px,${dy}px)`;jx=dx/m;jy=dy/m}joy.addEventListener('pointerdown',e=>{joyOn=true;joyMove(e)});addEventListener('pointermove',e=>{if(joyOn)joyMove(e)});addEventListener('pointerup',()=>{joyOn=false;jx=jy=0;stick.style.transform='translate(0,0)'});
+// map joystick to movement
+setInterval(()=>{if(Math.abs(jx)+Math.abs(jy)>.1){let dt=.035;move((Math.cos(p.a)*(-jy)-Math.sin(p.a)*jx)*2.1*dt,(Math.sin(p.a)*(-jy)+Math.cos(p.a)*jx)*2.1*dt)}},35);
+// look area
+let lx=null;document.getElementById('look').addEventListener('pointerdown',e=>{lx=e.clientX});addEventListener('pointermove',e=>{if(lx!==null){p.a+=(e.clientX-lx)*.006;lx=e.clientX}});addEventListener('pointerup',()=>lx=null);
+document.getElementById('up').onclick=floorUp;document.getElementById('down').onclick=floorDown;
+</script></body></html>
